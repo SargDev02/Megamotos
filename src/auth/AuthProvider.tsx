@@ -30,7 +30,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (!data.activo) {
-      await supabase.auth.signOut()
+      await supabase.auth.signOut({
+        scope: 'local',
+      })
       throw new Error('Esta cuenta se encuentra desactivada')
     }
 
@@ -73,7 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void cargarPerfil(session.user.id).catch(async (error) => {
         console.error(error)
         setPerfil(null)
-        await supabase.auth.signOut()
+        await supabase.auth.signOut({
+          scope: 'local',
+        })
       })
     })
 
@@ -111,13 +115,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await cargarPerfil(data.user.id)
     } catch (error) {
-      await supabase.auth.signOut()
+      await supabase.auth.signOut({
+        scope: 'local',
+      })
       throw error
     }
   }
 
   async function logout() {
-    await supabase.auth.signOut()
+    await supabase.auth.signOut({
+      scope: 'local',
+    })
+
     setUser(null)
     setPerfil(null)
   }
