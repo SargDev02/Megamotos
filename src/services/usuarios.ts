@@ -88,6 +88,32 @@ export async function cambiarEstadoUsuario(
   return data
 }
 
+export async function cambiarNombreUsuario(
+  username: string,
+  nombre: string,
+) {
+  const { data, error } = await supabase.functions.invoke(
+    'gestionar-usuarios',
+    {
+      body: {
+        action: 'update_name',
+        username,
+        nombre,
+      },
+    },
+  )
+
+  if (error) {
+    throw new Error(data?.error || error.message)
+  }
+
+  if (data?.error) {
+    throw new Error(data.error)
+  }
+
+  return data
+}
+
 export async function cambiarPorcentajeMecanico(
   username: string,
   porcentaje: number,

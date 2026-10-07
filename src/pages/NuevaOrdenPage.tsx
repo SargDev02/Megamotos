@@ -12,7 +12,6 @@ import {
   ClipboardList,
   DollarSign,
   Loader2,
-  Plus,
   ReceiptText,
   Trash2,
   UserRound,
@@ -23,6 +22,8 @@ import {
   Link,
   useParams,
 } from 'react-router-dom'
+
+import { BuscadorTrabajos } from '../components/BuscadorTrabajos'
 
 import {
   buscarMotoPorPlaca,
@@ -82,12 +83,6 @@ export function NuevaOrdenPage() {
   const [
     mecanicoId,
     setMecanicoId,
-  ] =
-    useState('')
-
-  const [
-    tipoTrabajoId,
-    setTipoTrabajoId,
   ] =
     useState('')
 
@@ -238,33 +233,22 @@ export function NuevaOrdenPage() {
         )
       : 0
 
-  function agregarTrabajo() {
-    setError('')
-
-    if (!tipoTrabajoId) {
-      setError(
-        'Selecciona un trabajo',
-      )
-
-      return
-    }
-
-    const tipo =
-      catalogo.find(
-        (trabajo) =>
-          trabajo.id ===
-          Number(
-            tipoTrabajoId,
+  const trabajosAgregadosIds =
+    useMemo(
+      () =>
+        new Set(
+          trabajosSeleccionados.map(
+            (trabajo) =>
+              trabajo.tipo.id,
           ),
-      )
+        ),
+      [trabajosSeleccionados],
+    )
 
-    if (!tipo) {
-      setError(
-        'El trabajo seleccionado no existe',
-      )
-
-      return
-    }
+  function agregarTrabajo(
+    tipo: TipoTrabajo,
+  ) {
+    setError('')
 
     const yaAgregado =
       trabajosSeleccionados.some(
@@ -294,7 +278,6 @@ export function NuevaOrdenPage() {
       ],
     )
 
-    setTipoTrabajoId('')
   }
 
   function cambiarPrecio(
@@ -769,47 +752,15 @@ export function NuevaOrdenPage() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <select
-                value={tipoTrabajoId}
-                onChange={(event) =>
-                  setTipoTrabajoId(
-                    event.target.value,
-                  )
-                }
-                className="h-11 flex-1 rounded-lg border border-zinc-300 bg-white px-3 text-sm outline-none transition focus:border-zinc-950 focus:ring-2 focus:ring-zinc-950/10"
-              >
-                <option value="">
-                  Selecciona un trabajo
-                </option>
-
-                {catalogo.map(
-                  (trabajo) => (
-                    <option
-                      key={trabajo.id}
-                      value={trabajo.id}
-                    >
-                      {trabajo.nombre}
-                      {' · '}
-                      {formatoCOP.format(
-                        Number(
-                          trabajo.precio_base,
-                        ),
-                      )}
-                    </option>
-                  ),
-                )}
-              </select>
-
-              <button
-                type="button"
-                onClick={agregarTrabajo}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-zinc-950 px-5 text-sm font-semibold text-white transition hover:bg-zinc-800"
-              >
-                <Plus className="size-4" />
-                Agregar
-              </button>
-            </div>
+            <BuscadorTrabajos
+              catalogo={catalogo}
+              trabajosAgregadosIds={
+                trabajosAgregadosIds
+              }
+              onSeleccionar={
+                agregarTrabajo
+              }
+            />
 
             {trabajosSeleccionados.length ===
             0 ? (

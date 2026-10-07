@@ -11,6 +11,7 @@ import {
   EyeOff,
   KeyRound,
   Loader2,
+  Pencil,
   Plus,
   RefreshCcw,
   Search,
@@ -24,6 +25,7 @@ import {
 
 import {
   cambiarEstadoUsuario,
+  cambiarNombreUsuario,
   cambiarPasswordUsuario,
   cambiarPorcentajeMecanico,
   crearUsuario,
@@ -131,6 +133,18 @@ export function UsuariosPage() {
   ] = useState<string | null>(
     null,
   )
+
+  const [
+    editandoNombre,
+    setEditandoNombre,
+  ] = useState<string | null>(
+    null,
+  )
+
+  const [
+    nombreEdicion,
+    setNombreEdicion,
+  ] = useState('')
 
   const [
     nuevoPassword,
@@ -540,6 +554,55 @@ export function UsuariosPage() {
         error instanceof Error
           ? error.message
           : 'No fue posible cambiar la contraseña',
+      )
+    } finally {
+      setAccionandoUsuario(
+        null,
+      )
+    }
+  }
+
+  async function handleNombre(
+    event:
+      FormEvent<HTMLFormElement>,
+    usuario: Perfil,
+  ) {
+    event.preventDefault()
+
+    const nombreActualizado =
+      nombreEdicion.trim()
+
+    if (!nombreActualizado) {
+      setError(
+        'El nombre no puede quedar vacío',
+      )
+      return
+    }
+
+    try {
+      setError('')
+      setMensaje('')
+      setAccionandoUsuario(
+        usuario.username,
+      )
+
+      await cambiarNombreUsuario(
+        usuario.username,
+        nombreActualizado,
+      )
+
+      await cargarUsuarios()
+
+      setEditandoNombre(null)
+      setNombreEdicion('')
+      setMensaje(
+        `Nombre de @${usuario.username} actualizado correctamente.`,
+      )
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'No fue posible cambiar el nombre',
       )
     } finally {
       setAccionandoUsuario(
@@ -1082,6 +1145,10 @@ export function UsuariosPage() {
                   editandoPassword ===
                   usuario.username
 
+                const editandoNombreActual =
+                  editandoNombre ===
+                  usuario.username
+
                 return (
                   <article
                     key={
@@ -1164,6 +1231,84 @@ export function UsuariosPage() {
                     </div>
 
                     <div className="space-y-4 p-5">
+                      {/* NOMBRE VISIBLE */}
+                      {editandoNombreActual && (
+                        <form
+                          onSubmit={(
+                            event,
+                          ) =>
+                            void handleNombre(
+                              event,
+                              usuario,
+                            )
+                          }
+                          className="rounded-xl border border-zinc-200 bg-zinc-50 p-4"
+                        >
+                          <label
+                            htmlFor={`nombre-${usuario.id}`}
+                            className="mb-2 block text-sm font-semibold text-zinc-950"
+                          >
+                            Nombre visible
+                          </label>
+
+                          <input
+                            id={`nombre-${usuario.id}`}
+                            type="text"
+                            value={
+                              nombreEdicion
+                            }
+                            onChange={(
+                              event,
+                            ) =>
+                              setNombreEdicion(
+                                event.target
+                                  .value,
+                              )
+                            }
+                            disabled={
+                              procesando
+                            }
+                            autoFocus
+                            className="h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 text-base outline-none transition focus:border-zinc-950 focus:ring-2 focus:ring-zinc-950/10 disabled:opacity-60 sm:text-sm"
+                          />
+
+                          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                            <button
+                              type="submit"
+                              disabled={
+                                procesando
+                              }
+                              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-zinc-950 px-4 text-sm font-bold text-white transition hover:bg-zinc-800 disabled:opacity-60 sm:w-auto"
+                            >
+                              {procesando && (
+                                <Loader2 className="size-4 animate-spin" />
+                              )}
+
+                              Guardar nombre
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={
+                                procesando
+                              }
+                              onClick={() => {
+                                setEditandoNombre(
+                                  null,
+                                )
+                                setNombreEdicion(
+                                  '',
+                                )
+                                setError('')
+                              }}
+                              className="h-10 w-full rounded-lg border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-600 transition hover:bg-zinc-100 disabled:opacity-60 sm:w-auto"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </form>
+                      )}
+
                       {/* PORCENTAJE */}
                       {usuario.rol ===
                         'MECANICO' && (
@@ -1321,9 +1466,52 @@ export function UsuariosPage() {
                         </div>
                       ) : (
                         <div className="flex flex-wrap gap-2">
+                          {!editandoNombreActual && (
+                            <button
+                              type="button"
+                              disabled={
+                                procesando
+                              }
+                              onClick={() => {
+                                setEditandoNombre(
+                                  usuario.username,
+                                )
+                                setNombreEdicion(
+                                  usuario.nombre,
+                                )
+                                setEditandoPassword(
+                                  null,
+                                )
+                                setNuevoPassword(
+                                  '',
+                                )
+                                setMostrarNuevoPassword(
+                                  false,
+                                )
+                                setError('')
+                                setMensaje('')
+                              }}
+                              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-60"
+                            >
+                              <Pencil className="size-4" />
+                              Cambiar nombre
+                            </button>
+                          )}
+
                           <button
                             type="button"
+                            disabled={
+                              procesando
+                            }
                             onClick={() => {
+                              setEditandoNombre(
+                                null,
+                              )
+
+                              setNombreEdicion(
+                                '',
+                              )
+
                               setEditandoPassword(
                                 usuario.username,
                               )
@@ -1339,7 +1527,7 @@ export function UsuariosPage() {
                               setError('')
                               setMensaje('')
                             }}
-                            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50"
+                            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-60"
                           >
                             <KeyRound className="size-4" />
                             Cambiar contraseña
