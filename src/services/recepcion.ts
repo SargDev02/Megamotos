@@ -28,6 +28,20 @@ export interface MotoConCliente {
   }
 }
 
+export interface ClienteConMotos extends Cliente {
+  motos: {
+    id: number
+    cliente_id: number
+    marca_id: number
+    placa: string
+    modelo: string | null
+    marca: {
+      id: number
+      nombre: string
+    }
+  }[]
+}
+
 export type EstadoOrden =
   | 'RECIBIDA'
   | 'EN_PROCESO'
@@ -236,6 +250,52 @@ export async function buscarMotoPorPlaca(
   }
 
   return data as unknown as MotoConCliente
+}
+
+export async function buscarClientesConMotos(
+  termino: string,
+): Promise<ClienteConMotos[]> {
+  const terminoLimpio = normalizarTexto(
+    termino,
+  ).replace(/[,()%_"\\]/g, '')
+
+  if (terminoLimpio.length < 2) {
+    return []
+  }
+
+  const patron = `%${terminoLimpio}%`
+  const { data, error } = await supabase
+    .from('clientes')
+    .select(`
+      id,
+      nombre,
+      documento,
+      telefono,
+
+      motos:motos!motos_cliente_id_fkey (
+        id,
+        cliente_id,
+        marca_id,
+        placa,
+        modelo,
+
+        marca:marcas_moto!motos_marca_id_fkey (
+          id,
+          nombre
+        )
+      )
+    `)
+    .or(
+      `nombre.ilike.${patron},documento.ilike.${patron}`,
+    )
+    .order('nombre')
+    .limit(10)
+
+  if (error) {
+    throw new Error(mensajeError(error))
+  }
+
+  return data as unknown as ClienteConMotos[]
 }
 
 async function obtenerOCrearCliente(

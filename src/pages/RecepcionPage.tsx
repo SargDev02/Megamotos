@@ -24,6 +24,7 @@ import {
 } from 'react-router-dom'
 
 import {
+  buscarClientesConMotos,
   buscarMotoPorPlaca,
   crearMarca,
   listarHistorialMoto,
@@ -31,10 +32,15 @@ import {
   listarModelosPorMarca,
   normalizarPlaca,
   registrarClienteYMoto,
+  type ClienteConMotos,
   type HistorialOrden,
   type MarcaMoto,
   type MotoConCliente,
 } from '../services/recepcion'
+
+type ModoBusqueda =
+  | 'PLACA'
+  | 'CLIENTE'
 
 const formatoCOP =
   new Intl.NumberFormat(
@@ -58,9 +64,39 @@ const formatoFecha =
 
 export function RecepcionPage() {
   const [
+    modoBusqueda,
+    setModoBusqueda,
+  ] = useState<ModoBusqueda>('PLACA')
+
+  const [
     placaBusqueda,
     setPlacaBusqueda,
   ] = useState('')
+
+  const [
+    terminoCliente,
+    setTerminoCliente,
+  ] = useState('')
+
+  const [
+    clientesEncontrados,
+    setClientesEncontrados,
+  ] = useState<ClienteConMotos[]>([])
+
+  const [
+    buscandoCliente,
+    setBuscandoCliente,
+  ] = useState(false)
+
+  const [
+    busquedaClienteRealizada,
+    setBusquedaClienteRealizada,
+  ] = useState(false)
+
+  const [
+    motoSeleccionandoseId,
+    setMotoSeleccionandoseId,
+  ] = useState<number | null>(null)
 
   const [
     busquedaRealizada,
@@ -207,6 +243,70 @@ export function RecepcionPage() {
     void cargarModelos()
   }, [marcaId])
 
+  useEffect(() => {
+    const termino = terminoCliente
+      .trim()
+      .replace(/\s+/g, ' ')
+
+    if (
+      modoBusqueda !== 'CLIENTE' ||
+      termino.length < 2
+    ) {
+      return
+    }
+
+    let ignorarResultado = false
+    const temporizador = window.setTimeout(
+      () => {
+        setBuscandoCliente(true)
+
+        void buscarClientesConMotos(
+          termino,
+        )
+          .then(
+            (clientes) => {
+              if (ignorarResultado) {
+                return
+              }
+
+              setClientesEncontrados(
+                clientes,
+              )
+              setBusquedaClienteRealizada(
+                true,
+              )
+            },
+            (error: unknown) => {
+              if (ignorarResultado) {
+                return
+              }
+
+              setClientesEncontrados([])
+              setBusquedaClienteRealizada(
+                true,
+              )
+              setError(
+                error instanceof Error
+                  ? error.message
+                  : 'No fue posible buscar clientes',
+              )
+            },
+          )
+          .finally(() => {
+            if (!ignorarResultado) {
+              setBuscandoCliente(false)
+            }
+          })
+      },
+      300,
+    )
+
+    return () => {
+      ignorarResultado = true
+      window.clearTimeout(temporizador)
+    }
+  }, [modoBusqueda, terminoCliente])
+
   async function handleBuscar(
     event: FormEvent<HTMLFormElement>,
   ) {
@@ -259,6 +359,75 @@ export function RecepcionPage() {
       )
     } finally {
       setBuscando(false)
+    }
+  }
+
+  function cambiarModoBusqueda(
+    modo: ModoBusqueda,
+  ) {
+    setModoBusqueda(modo)
+
+    if (
+      modo === 'CLIENTE' &&
+      !resultado
+    ) {
+      setBusquedaRealizada(false)
+    }
+
+    setError('')
+    setMensaje('')
+    setClientesEncontrados([])
+    setBusquedaClienteRealizada(false)
+    setBuscandoCliente(false)
+  }
+
+  function handleCambioTerminoCliente(
+    valor: string,
+  ) {
+    setTerminoCliente(valor)
+    setClientesEncontrados([])
+    setBusquedaClienteRealizada(false)
+    setBuscandoCliente(false)
+    setError('')
+    setMensaje('')
+  }
+
+  async function seleccionarMotoCliente(
+    cliente: ClienteConMotos,
+    moto: ClienteConMotos['motos'][number],
+  ) {
+    setError('')
+    setMensaje('')
+    setMotoSeleccionandoseId(moto.id)
+
+    const motoConCliente: MotoConCliente = {
+      ...moto,
+      cliente: {
+        id: cliente.id,
+        nombre: cliente.nombre,
+        documento: cliente.documento,
+        telefono: cliente.telefono,
+      },
+    }
+
+    try {
+      setPlacaBusqueda(moto.placa)
+      setResultado(motoConCliente)
+      setBusquedaRealizada(true)
+      setHistorial([])
+      setTerminoCliente('')
+      setClientesEncontrados([])
+      setBusquedaClienteRealizada(false)
+
+      await cargarHistorial(moto.id)
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'No fue posible cargar la motocicleta',
+      )
+    } finally {
+      setMotoSeleccionandoseId(null)
     }
   }
 
@@ -385,7 +554,13 @@ export function RecepcionPage() {
   }
 
   function nuevaBusqueda() {
+    setModoBusqueda('PLACA')
     setPlacaBusqueda('')
+    setTerminoCliente('')
+    setClientesEncontrados([])
+    setBuscandoCliente(false)
+    setBusquedaClienteRealizada(false)
+    setMotoSeleccionandoseId(null)
     setBusquedaRealizada(false)
     setResultado(null)
     setHistorial([])
@@ -436,10 +611,10 @@ export function RecepcionPage() {
             </h1>
 
             <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">
-              Busca la placa para consultar
-              la motocicleta, revisar su
-              historial o registrar una nueva
-              orden.
+              Busca una motocicleta por placa
+              o por propietario para revisar
+              su historial o registrar una
+              nueva orden.
             </p>
           </div>
 
@@ -473,53 +648,218 @@ export function RecepcionPage() {
               </h2>
 
               <p className="text-sm text-zinc-400">
-                Ingresa la placa del vehículo
+                {modoBusqueda === 'PLACA'
+                  ? 'Ingresa la placa del vehículo'
+                  : 'Busca por nombre o cédula del propietario'}
               </p>
             </div>
           </div>
         </div>
 
-        <form
-          onSubmit={handleBuscar}
-          className="p-5 sm:p-6"
-        >
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="relative flex-1">
-              <Bike className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-zinc-400" />
-
-              <input
-                value={placaBusqueda}
-                onChange={(event) =>
-                  setPlacaBusqueda(
-                    event.target.value
-                      .toUpperCase(),
-                  )
-                }
-                disabled={buscando}
-                placeholder="Ej. ABC12D"
-                className="h-14 w-full rounded-xl border border-zinc-300 bg-white pl-12 pr-4 text-lg font-bold uppercase tracking-wider text-zinc-950 outline-none transition placeholder:font-normal placeholder:tracking-normal placeholder:text-zinc-400 focus:border-zinc-950 focus:ring-2 focus:ring-zinc-950/10"
-              />
-            </div>
+        <div className="p-5 sm:p-6">
+          <div
+            role="tablist"
+            aria-label="Modo de búsqueda"
+            className="mb-5 grid grid-cols-2 rounded-xl bg-zinc-100 p-1"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={
+                modoBusqueda === 'PLACA'
+              }
+              onClick={() =>
+                cambiarModoBusqueda('PLACA')
+              }
+              className={`min-h-11 rounded-lg px-3 text-sm font-semibold transition ${
+                modoBusqueda === 'PLACA'
+                  ? 'bg-white text-zinc-950 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-950'
+              }`}
+            >
+              Por placa
+            </button>
 
             <button
-              type="submit"
-              disabled={buscando}
-              className="inline-flex h-14 items-center justify-center gap-2 rounded-xl bg-zinc-950 px-7 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+              type="button"
+              role="tab"
+              aria-selected={
+                modoBusqueda === 'CLIENTE'
+              }
+              onClick={() =>
+                cambiarModoBusqueda('CLIENTE')
+              }
+              className={`min-h-11 rounded-lg px-3 text-sm font-semibold transition ${
+                modoBusqueda === 'CLIENTE'
+                  ? 'bg-white text-zinc-950 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-950'
+              }`}
             >
-              {buscando ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Buscando...
-                </>
-              ) : (
-                <>
-                  <Search className="size-4" />
-                  Buscar placa
-                </>
-              )}
+              Por cliente
             </button>
           </div>
-        </form>
+
+          {modoBusqueda === 'PLACA' ? (
+            <form onSubmit={handleBuscar}>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="relative flex-1">
+                  <Bike className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-zinc-400" />
+
+                  <input
+                    value={placaBusqueda}
+                    onChange={(event) =>
+                      setPlacaBusqueda(
+                        event.target.value
+                          .toUpperCase(),
+                      )
+                    }
+                    disabled={buscando}
+                    placeholder="Ej. ABC12D"
+                    className="h-14 w-full rounded-xl border border-zinc-300 bg-white pl-12 pr-4 text-lg font-bold uppercase tracking-wider text-zinc-950 outline-none transition placeholder:font-normal placeholder:tracking-normal placeholder:text-zinc-400 focus:border-zinc-950 focus:ring-2 focus:ring-zinc-950/10"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={buscando}
+                  className="inline-flex h-14 items-center justify-center gap-2 rounded-xl bg-zinc-950 px-7 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {buscando ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Buscando...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="size-4" />
+                      Buscar placa
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div>
+              <div className="relative">
+                <UserRound className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-zinc-400" />
+
+                <input
+                  value={terminoCliente}
+                  onChange={(event) =>
+                    handleCambioTerminoCliente(
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Nombre o cédula"
+                  className="h-14 w-full rounded-xl border border-zinc-300 bg-white pl-12 pr-4 text-base text-zinc-950 outline-none transition placeholder:text-zinc-400 focus:border-zinc-950 focus:ring-2 focus:ring-zinc-950/10"
+                />
+              </div>
+
+              {terminoCliente
+                .trim()
+                .replace(/\s+/g, ' ')
+                .length < 2 && (
+                <p className="mt-2 text-xs text-zinc-500">
+                  Escribe al menos 2 caracteres.
+                </p>
+              )}
+
+              {buscandoCliente && (
+                <div className="mt-4 flex items-center gap-2 rounded-xl bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-600">
+                  <Loader2 className="size-4 animate-spin" />
+                  Buscando...
+                </div>
+              )}
+
+              {!buscandoCliente &&
+                busquedaClienteRealizada &&
+                clientesEncontrados.length ===
+                  0 && (
+                  <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-5 text-center text-sm text-zinc-600">
+                    No encontramos clientes
+                  </div>
+                )}
+
+              {clientesEncontrados.length >
+                0 && (
+                <div className="mt-4 max-h-[28rem] space-y-3 overflow-y-auto overscroll-contain pr-1">
+                  {clientesEncontrados.map(
+                    (cliente) => (
+                      <article
+                        key={cliente.id}
+                        className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4"
+                      >
+                        <div className="min-w-0 border-b border-zinc-100 pb-3">
+                          <p className="break-words font-bold text-zinc-950">
+                            {cliente.nombre}
+                          </p>
+
+                          <p className="mt-1 break-words text-sm text-zinc-500">
+                            CC{' '}
+                            {cliente.documento ||
+                              'No registrada'}
+                          </p>
+                        </div>
+
+                        {cliente.motos.length ===
+                        0 ? (
+                          <p className="pt-3 text-sm text-zinc-500">
+                            No tiene motocicletas
+                            registradas
+                          </p>
+                        ) : (
+                          <div className="space-y-2 pt-3">
+                            {cliente.motos.map(
+                              (moto) => (
+                                <button
+                                  key={moto.id}
+                                  type="button"
+                                  disabled={
+                                    motoSeleccionandoseId !==
+                                    null
+                                  }
+                                  onClick={() =>
+                                    void seleccionarMotoCliente(
+                                      cliente,
+                                      moto,
+                                    )
+                                  }
+                                  className="flex min-h-16 w-full min-w-0 touch-manipulation items-center gap-3 rounded-xl bg-zinc-950 px-4 py-3 text-left text-white transition hover:bg-zinc-800 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  <Bike className="size-5 shrink-0 text-zinc-400" />
+
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block break-words text-sm font-semibold">
+                                      {
+                                        moto.marca
+                                          .nombre
+                                      }{' '}
+                                      {moto.modelo ||
+                                        'Sin modelo'}
+                                    </span>
+
+                                    <span className="mt-1 block text-base font-bold tracking-wider">
+                                      {moto.placa}
+                                    </span>
+                                  </span>
+
+                                  {motoSeleccionandoseId ===
+                                    moto.id && (
+                                    <Loader2 className="size-4 shrink-0 animate-spin" />
+                                  )}
+                                </button>
+                              ),
+                            )}
+                          </div>
+                        )}
+                      </article>
+                    ),
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </section>
 
       {/* MENSAJES */}
