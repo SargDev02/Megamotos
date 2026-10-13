@@ -33,6 +33,8 @@ export interface PagoHistorial {
   mecanico_nombre: string
 
   total_pagado: number
+  descuento_prestamos: number
+  total_entregado: number
   total_cobrado: number
 
   moto_placa: string
@@ -47,6 +49,8 @@ export interface PagoHistorial {
 export interface ResultadoLiquidacion {
   liquidacion_id: number
   total_pagado: number
+  descuento_prestamos: number
+  total_entregado: number
   cantidad_ordenes: number
   fecha_pago: string
 }
@@ -97,6 +101,12 @@ Promise<PagoHistorial[]> {
     total_pagado:
       Number(item.total_pagado),
 
+    descuento_prestamos:
+      Number(item.descuento_prestamos),
+
+    total_entregado:
+      Number(item.total_entregado),
+
     total_cobrado:
       Number(item.total_cobrado),
 
@@ -145,6 +155,16 @@ export async function registrarPagoMecanico(
     total_pagado:
       Number(
         resultado.total_pagado,
+      ),
+
+    descuento_prestamos:
+      Number(
+        resultado.descuento_prestamos,
+      ),
+
+    total_entregado:
+      Number(
+        resultado.total_entregado,
       ),
 
     cantidad_ordenes:

@@ -12,8 +12,10 @@ import {
   ChevronUp,
   CircleDollarSign,
   CreditCard,
+  HandCoins,
   History,
   Loader2,
+  Plus,
   RefreshCcw,
   UserRound,
   X,
@@ -26,6 +28,15 @@ import {
   type PagoHistorial,
   type PagoPendiente,
 } from '../services/liquidaciones'
+import {
+  listarAplicacionesPrestamos,
+  listarMecanicosParaPrestamos,
+  listarPrestamosMecanicos,
+  registrarPrestamoMecanico,
+  type AplicacionPrestamo,
+  type MecanicoPrestamo,
+  type PrestamoMecanico,
+} from '../services/prestamos'
 
 interface GrupoPendiente {
   mecanico_id: string
@@ -51,14 +62,14 @@ interface GrupoHistorial {
 
   total_cobrado: number
   total_pagado: number
+  descuento_prestamos: number
+  total_entregado: number
 
   motos: PagoHistorial[]
+  prestamos: AplicacionPrestamo[]
 }
 
-interface MecanicoLiquidacion {
-  id: string
-  nombre: string
-}
+type MecanicoLiquidacion = MecanicoPrestamo
 
 const formatoCOP =
   new Intl.NumberFormat(
@@ -88,6 +99,16 @@ const formatoFechaPendiente =
       day: 'numeric',
       month: 'long',
       year: 'numeric',
+      timeZone: 'America/Bogota',
+    },
+  )
+
+const formatoFechaHora =
+  new Intl.DateTimeFormat(
+    'es-CO',
+    {
+      dateStyle: 'medium',
+      timeStyle: 'short',
       timeZone: 'America/Bogota',
     },
   )
@@ -176,6 +197,22 @@ export function LiquidacionesPage() {
     useState<PagoHistorial[]>([])
 
   const [
+    prestamos,
+    setPrestamos,
+  ] =
+    useState<PrestamoMecanico[]>([])
+
+  const [
+    aplicacionesPrestamos,
+    setAplicacionesPrestamos,
+  ] = useState<AplicacionPrestamo[]>([])
+
+  const [
+    mecanicosRegistrados,
+    setMecanicosRegistrados,
+  ] = useState<MecanicoPrestamo[]>([])
+
+  const [
     mecanicoElegidoId,
     setMecanicoSeleccionadoId,
   ] =
@@ -237,6 +274,26 @@ export function LiquidacionesPage() {
     )
 
   const [
+    formularioPrestamoAbierto,
+    setFormularioPrestamoAbierto,
+  ] = useState(false)
+
+  const [
+    descripcionPrestamo,
+    setDescripcionPrestamo,
+  ] = useState('')
+
+  const [
+    montoPrestamo,
+    setMontoPrestamo,
+  ] = useState('')
+
+  const [
+    registrandoPrestamo,
+    setRegistrandoPrestamo,
+  ] = useState(false)
+
+  const [
     error,
     setError,
   ] =
@@ -262,10 +319,16 @@ export function LiquidacionesPage() {
       const [
         pagosPendientes,
         historialPagos,
+        prestamosMecanicos,
+        aplicaciones,
+        mecanicos,
       ] =
         await Promise.all([
           listarPagosPendientes(),
           listarHistorialPagos(),
+          listarPrestamosMecanicos(),
+          listarAplicacionesPrestamos(),
+          listarMecanicosParaPrestamos(),
         ])
 
       setPendientes(
@@ -274,6 +337,18 @@ export function LiquidacionesPage() {
 
       setHistorial(
         historialPagos,
+      )
+
+      setPrestamos(
+        prestamosMecanicos,
+      )
+
+      setAplicacionesPrestamos(
+        aplicaciones,
+      )
+
+      setMecanicosRegistrados(
+        mecanicos,
       )
     } catch (error) {
       setError(
@@ -293,16 +368,28 @@ export function LiquidacionesPage() {
     void Promise.all([
       listarPagosPendientes(),
       listarHistorialPagos(),
+      listarPrestamosMecanicos(),
+      listarAplicacionesPrestamos(),
+      listarMecanicosParaPrestamos(),
     ]).then(
-      ([pagosPendientes, historialPagos]) => {
+      (([
+        pagosPendientes,
+        historialPagos,
+        prestamosMecanicos,
+        aplicaciones,
+        mecanicos,
+      ]) => {
         if (ignorarResultado) {
           return
         }
 
         setPendientes(pagosPendientes)
         setHistorial(historialPagos)
+        setPrestamos(prestamosMecanicos)
+        setAplicacionesPrestamos(aplicaciones)
+        setMecanicosRegistrados(mecanicos)
         setCargando(false)
-      },
+      }),
       (error: unknown) => {
         if (ignorarResultado) {
           return
@@ -427,9 +514,22 @@ export function LiquidacionesPage() {
             total_pagado:
               pago.total_pagado,
 
+            descuento_prestamos:
+              pago.descuento_prestamos,
+
+            total_entregado:
+              pago.total_entregado,
+
             motos: [
               pago,
             ],
+
+            prestamos:
+              aplicacionesPrestamos.filter(
+                (aplicacion) =>
+                  aplicacion.liquidacion_id ===
+                  pago.liquidacion_id,
+              ),
           },
         )
       }
@@ -437,7 +537,10 @@ export function LiquidacionesPage() {
       return Array.from(
         mapa.values(),
       )
-    }, [historial])
+    }, [
+      historial,
+      aplicacionesPrestamos,
+    ])
 
   const mecanicos =
     useMemo(() => {
@@ -446,6 +549,16 @@ export function LiquidacionesPage() {
           string,
           MecanicoLiquidacion
         >()
+
+      for (
+        const mecanico of
+          mecanicosRegistrados
+      ) {
+        mapa.set(
+          mecanico.id,
+          mecanico,
+        )
+      }
 
       for (
         const grupo of gruposPendientes
@@ -483,6 +596,24 @@ export function LiquidacionesPage() {
         }
       }
 
+      for (const prestamo of prestamos) {
+        if (
+          !mapa.has(
+            prestamo.mecanico_id,
+          )
+        ) {
+          mapa.set(
+            prestamo.mecanico_id,
+            {
+              id:
+                prestamo.mecanico_id,
+              nombre:
+                prestamo.mecanico_nombre,
+            },
+          )
+        }
+      }
+
       return Array.from(
         mapa.values(),
       ).sort(
@@ -494,6 +625,8 @@ export function LiquidacionesPage() {
     }, [
       gruposPendientes,
       gruposHistorial,
+      mecanicosRegistrados,
+      prestamos,
     ])
 
   const mecanicoSeleccionadoId =
@@ -517,6 +650,26 @@ export function LiquidacionesPage() {
       (grupo) =>
         grupo.mecanico_id ===
         mecanicoSeleccionadoId,
+    )
+
+  const prestamosSeleccionados =
+    prestamos.filter(
+      (prestamo) =>
+        prestamo.mecanico_id ===
+        mecanicoSeleccionadoId,
+    )
+
+  const prestamosPendientesSeleccionados =
+    prestamosSeleccionados.filter(
+      (prestamo) =>
+        prestamo.saldo_pendiente > 0,
+    )
+
+  const saldoPrestamosPendiente =
+    prestamosPendientesSeleccionados.reduce(
+      (total, prestamo) =>
+        total + prestamo.saldo_pendiente,
+      0,
     )
 
   const pendientesPorDia =
@@ -599,6 +752,16 @@ export function LiquidacionesPage() {
         orden.pago_mecanico,
       0,
     )
+
+  const descuentoPrestamosEstimado =
+    Math.min(
+      totalMecanicoSeleccionado,
+      saldoPrestamosPendiente,
+    )
+
+  const totalEntregarEstimado =
+    totalMecanicoSeleccionado -
+    descuentoPrestamosEstimado
 
   const historialSeleccionado =
     useMemo(() => {
@@ -714,6 +877,73 @@ export function LiquidacionesPage() {
     )
   }
 
+  function cerrarFormularioPrestamo() {
+    setFormularioPrestamoAbierto(false)
+    setDescripcionPrestamo('')
+    setMontoPrestamo('')
+  }
+
+  async function registrarPrestamo() {
+    if (!mecanicoSeleccionadoId) {
+      setError('Selecciona un mecánico')
+      return
+    }
+
+    const descripcion =
+      descripcionPrestamo.trim()
+    const monto = Math.round(
+      Number(montoPrestamo),
+    )
+
+    if (!descripcion) {
+      setError(
+        'La descripción del préstamo es obligatoria',
+      )
+      return
+    }
+
+    if (
+      !Number.isFinite(monto) ||
+      monto <= 0
+    ) {
+      setError(
+        'El valor del préstamo debe ser mayor que cero',
+      )
+      return
+    }
+
+    try {
+      setError('')
+      setMensaje('')
+      setRegistrandoPrestamo(true)
+
+      await registrarPrestamoMecanico({
+        mecanicoId:
+          mecanicoSeleccionadoId,
+        descripcion,
+        monto,
+      })
+
+      cerrarFormularioPrestamo()
+
+      setMensaje(
+        `Préstamo registrado a ${mecanicoSeleccionado?.nombre ?? 'el mecánico'} por ${formatoCOP.format(
+          monto,
+        )}.`,
+      )
+
+      await cargarDatos()
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'No fue posible registrar el préstamo',
+      )
+    } finally {
+      setRegistrandoPrestamo(false)
+    }
+  }
+
   async function pagar(
     grupo: GrupoPendiente,
   ) {
@@ -759,13 +989,13 @@ export function LiquidacionesPage() {
       )
 
       setMensaje(
-        `Pago registrado a ${grupo.mecanico_nombre} por ${formatoCOP.format(
+        `Liquidación registrada. Generado: ${formatoCOP.format(
           resultado.total_pagado,
-        )} correspondiente a ${resultado.cantidad_ordenes} ${
-          resultado.cantidad_ordenes === 1
-            ? 'orden'
-            : 'órdenes'
-        }.`,
+        )} · Préstamos: ${formatoCOP.format(
+          resultado.descuento_prestamos,
+        )} · Entregado: ${formatoCOP.format(
+          resultado.total_entregado,
+        )}.`,
       )
 
       await cargarDatos()
@@ -819,7 +1049,8 @@ export function LiquidacionesPage() {
         <button
           type="button"
           disabled={
-            actualizando
+            actualizando ||
+            registrandoPrestamo
           }
           onClick={() =>
             void cargarDatos()
@@ -898,6 +1129,10 @@ export function LiquidacionesPage() {
                 return (
                   <button
                     type="button"
+                    disabled={
+                      registrandoPrestamo ||
+                      pagandoMecanicoId !== null
+                    }
                     key={
                       mecanico.id
                     }
@@ -918,11 +1153,13 @@ export function LiquidacionesPage() {
                         null,
                       )
 
+                      cerrarFormularioPrestamo()
+
                       setMensaje('')
                       setError('')
                     }}
                     className={[
-                      'relative inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition',
+                      'relative inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60',
                       activo
                         ? 'border-zinc-950 bg-zinc-950 text-white shadow-sm'
                         : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50',
@@ -1018,6 +1255,206 @@ export function LiquidacionesPage() {
             </div>
           </section>
 
+          {/* PRÉSTAMOS */}
+          <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                  <HandCoins className="size-5" />
+                </div>
+
+                <div className="min-w-0">
+                  <h2 className="text-xl font-bold text-zinc-950">
+                    Préstamos / adelantos
+                  </h2>
+
+                  <p className="mt-1 text-sm text-zinc-500">
+                    Se descuentan automáticamente de las liquidaciones, comenzando por el más antiguo.
+                  </p>
+                </div>
+              </div>
+
+              {!formularioPrestamoAbierto && (
+                <button
+                  type="button"
+                  disabled={registrandoPrestamo}
+                  onClick={() => {
+                    setFormularioPrestamoAbierto(true)
+                    setError('')
+                    setMensaje('')
+                  }}
+                  className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-zinc-950 px-4 text-sm font-bold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                >
+                  <Plus className="size-4" />
+                  Registrar préstamo
+                </button>
+              )}
+            </div>
+
+            <div className="mt-5 rounded-xl bg-amber-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-amber-700">
+                Saldo pendiente total
+              </p>
+
+              <p className="mt-2 break-words text-2xl font-black text-amber-950">
+                {formatoCOP.format(
+                  saldoPrestamosPendiente,
+                )}
+              </p>
+            </div>
+
+            {formularioPrestamoAbierto && (
+              <form
+                className="mt-5 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 sm:p-5"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void registrarPrestamo()
+                }}
+              >
+                <div className="grid min-w-0 gap-4 md:grid-cols-2">
+                  <div className="min-w-0">
+                    <label
+                      htmlFor="prestamo-descripcion"
+                      className="mb-2 block text-sm font-semibold text-zinc-800"
+                    >
+                      Descripción *
+                    </label>
+
+                    <input
+                      id="prestamo-descripcion"
+                      type="text"
+                      required
+                      disabled={registrandoPrestamo}
+                      value={descripcionPrestamo}
+                      onChange={(event) =>
+                        setDescripcionPrestamo(
+                          event.target.value,
+                        )
+                      }
+                      placeholder="Motivo del préstamo"
+                      className="h-11 w-full min-w-0 rounded-xl border border-zinc-300 bg-white px-3 text-sm outline-none transition focus:border-zinc-950 focus:ring-2 focus:ring-zinc-950/10 disabled:opacity-60"
+                    />
+                  </div>
+
+                  <div className="min-w-0">
+                    <label
+                      htmlFor="prestamo-valor"
+                      className="mb-2 block text-sm font-semibold text-zinc-800"
+                    >
+                      Valor *
+                    </label>
+
+                    <input
+                      id="prestamo-valor"
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      step="1"
+                      required
+                      disabled={registrandoPrestamo}
+                      value={montoPrestamo}
+                      onChange={(event) =>
+                        setMontoPrestamo(
+                          event.target.value,
+                        )
+                      }
+                      placeholder="0"
+                      className="h-11 w-full min-w-0 rounded-xl border border-zinc-300 bg-white px-3 text-sm outline-none transition focus:border-zinc-950 focus:ring-2 focus:ring-zinc-950/10 disabled:opacity-60"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="submit"
+                    disabled={registrandoPrestamo}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-zinc-950 px-4 text-sm font-bold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {registrandoPrestamo ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <HandCoins className="size-4" />
+                    )}
+                    {registrandoPrestamo
+                      ? 'Registrando...'
+                      : 'Registrar préstamo'}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={registrandoPrestamo}
+                    onClick={cerrarFormularioPrestamo}
+                    className="min-h-11 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="mt-5 space-y-3">
+              {prestamosPendientesSeleccionados.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-5 text-center text-sm text-zinc-500">
+                  No hay préstamos pendientes para este mecánico.
+                </div>
+              ) : (
+                prestamosPendientesSeleccionados.map(
+                  (prestamo) => (
+                    <article
+                      key={prestamo.prestamo_id}
+                      className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4"
+                    >
+                      <p className="break-words font-bold text-zinc-950">
+                        {prestamo.descripcion}
+                      </p>
+
+                      <p className="mt-1 text-xs text-zinc-500">
+                        {formatoFechaHora.format(
+                          new Date(prestamo.created_at),
+                        )}
+                      </p>
+
+                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                            Original
+                          </p>
+                          <p className="mt-1 break-words font-bold text-zinc-950">
+                            {formatoCOP.format(
+                              prestamo.monto_original,
+                            )}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                            Descontado
+                          </p>
+                          <p className="mt-1 break-words font-bold text-zinc-700">
+                            {formatoCOP.format(
+                              prestamo.monto_aplicado,
+                            )}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                            Saldo pendiente
+                          </p>
+                          <p className="mt-1 break-words font-black text-amber-900">
+                            {formatoCOP.format(
+                              prestamo.saldo_pendiente,
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </article>
+                  ),
+                )
+              )}
+            </div>
+          </section>
+
           {/* PENDIENTE */}
           <section>
             <div className="mb-4 flex items-center gap-3">
@@ -1094,7 +1531,8 @@ export function LiquidacionesPage() {
                             type="button"
                             disabled={
                               pagandoMecanicoId !==
-                              null
+                               null ||
+                              registrandoPrestamo
                             }
                             onClick={() =>
                               alternarDia(
@@ -1128,7 +1566,8 @@ export function LiquidacionesPage() {
                                   }
                                   disabled={
                                     pagandoMecanicoId !==
-                                    null
+                                      null ||
+                                    registrandoPrestamo
                                   }
                                   onClick={() =>
                                     alternarOrden(
@@ -1262,27 +1701,63 @@ export function LiquidacionesPage() {
                     </p>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                     <div className="rounded-xl bg-zinc-50 p-4">
                       <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">
-                        Total cobrado seleccionado
+                        Total cliente
                       </p>
 
-                      <p className="mt-2 text-2xl font-black text-zinc-950">
+                      <p className="mt-2 break-words text-xl font-black text-zinc-950">
                         {formatoCOP.format(
                           totalCobradoSeleccionado,
                         )}
                       </p>
                     </div>
 
-                    <div className="rounded-xl bg-emerald-50 p-4">
-                      <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
-                        Total a pagar al mecánico
+                    <div className="rounded-xl bg-zinc-50 p-4">
+                      <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">
+                        Generado por órdenes
                       </p>
 
-                      <p className="mt-2 text-2xl font-black text-emerald-800">
+                      <p className="mt-2 break-words text-xl font-black text-zinc-950">
                         {formatoCOP.format(
                           totalMecanicoSeleccionado,
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-amber-50 p-4">
+                      <p className="text-xs font-bold uppercase tracking-wide text-amber-700">
+                        Préstamos pendientes
+                      </p>
+
+                      <p className="mt-2 break-words text-xl font-black text-amber-900">
+                        {formatoCOP.format(
+                          saldoPrestamosPendiente,
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-amber-50 p-4">
+                      <p className="text-xs font-bold uppercase tracking-wide text-amber-700">
+                        Descuento que se aplicará
+                      </p>
+
+                      <p className="mt-2 break-words text-xl font-black text-amber-900">
+                        -{formatoCOP.format(
+                          descuentoPrestamosEstimado,
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-emerald-50 p-4 sm:col-span-2 xl:col-span-1">
+                      <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
+                        Total a entregar
+                      </p>
+
+                      <p className="mt-2 break-words text-2xl font-black text-emerald-800">
+                        {formatoCOP.format(
+                          totalEntregarEstimado,
                         )}
                       </p>
                     </div>
@@ -1297,7 +1772,8 @@ export function LiquidacionesPage() {
                           pagosSeleccionados.length ===
                             0 ||
                           pagandoMecanicoId !==
-                            null
+                            null ||
+                          registrandoPrestamo
                         }
                         onClick={() =>
                           setConfirmandoMecanicoId(
@@ -1336,17 +1812,47 @@ export function LiquidacionesPage() {
                           .
                         </p>
 
-                        <div className="mt-4 rounded-lg bg-white/70 p-3">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
-                            Total a pagar
-                          </p>
+                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-lg bg-white/70 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-600">
+                              Generado por órdenes
+                            </p>
 
-                          <p className="mt-1 text-xl font-black text-amber-950">
-                            {formatoCOP.format(
-                              totalMecanicoSeleccionado,
-                            )}
-                          </p>
+                            <p className="mt-1 break-words text-lg font-black text-zinc-950">
+                              {formatoCOP.format(
+                                totalMecanicoSeleccionado,
+                              )}
+                            </p>
+                          </div>
+
+                          <div className="rounded-lg bg-white/70 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                              Descuento por préstamos
+                            </p>
+
+                            <p className="mt-1 break-words text-lg font-black text-amber-950">
+                              -{formatoCOP.format(
+                                descuentoPrestamosEstimado,
+                              )}
+                            </p>
+                          </div>
+
+                          <div className="rounded-lg bg-emerald-50 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                              Total a entregar
+                            </p>
+
+                            <p className="mt-1 break-words text-xl font-black text-emerald-800">
+                              {formatoCOP.format(
+                                totalEntregarEstimado,
+                              )}
+                            </p>
+                          </div>
                         </div>
+
+                        <p className="mt-3 text-sm font-medium text-amber-900">
+                          Los préstamos más antiguos se descontarán primero.
+                        </p>
 
                         <div className="mt-4 flex flex-wrap gap-2">
                           <button
@@ -1545,7 +2051,7 @@ export function LiquidacionesPage() {
                             </div>
                           </div>
 
-                          <div className="grid flex-1 gap-3 sm:grid-cols-2">
+                          <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                             <div className="rounded-xl bg-zinc-50 px-4 py-3">
                               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
                                 Total cliente
@@ -1558,14 +2064,38 @@ export function LiquidacionesPage() {
                               </p>
                             </div>
 
-                            <div className="rounded-xl bg-emerald-50 px-4 py-3">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                                Pagado al mecánico
+                            <div className="rounded-xl bg-zinc-50 px-4 py-3">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                                Generado por órdenes
                               </p>
 
-                              <p className="mt-1 text-lg font-black text-emerald-800">
+                              <p className="mt-1 break-words text-lg font-black text-zinc-950">
                                 {formatoCOP.format(
                                   liquidacion.total_pagado,
+                                )}
+                              </p>
+                            </div>
+
+                            <div className="rounded-xl bg-amber-50 px-4 py-3">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                                Descuento préstamos
+                              </p>
+
+                              <p className="mt-1 break-words text-lg font-black text-amber-900">
+                                -{formatoCOP.format(
+                                  liquidacion.descuento_prestamos,
+                                )}
+                              </p>
+                            </div>
+
+                            <div className="rounded-xl bg-emerald-50 px-4 py-3">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                                Total entregado
+                              </p>
+
+                              <p className="mt-1 break-words text-lg font-black text-emerald-800">
+                                {formatoCOP.format(
+                                  liquidacion.total_entregado,
                                 )}
                               </p>
                             </div>
@@ -1663,7 +2193,7 @@ export function LiquidacionesPage() {
 
                                       <div>
                                         <p className="text-xs text-zinc-500">
-                                          Pagado
+                                          Generado
                                         </p>
 
                                         <p className="mt-1 font-bold text-emerald-700">
@@ -1677,6 +2207,42 @@ export function LiquidacionesPage() {
                                 ),
                               )}
                             </div>
+
+                            {liquidacion.prestamos.length > 0 && (
+                              <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
+                                <h4 className="font-bold text-amber-950">
+                                  Préstamos descontados
+                                </h4>
+
+                                <div className="mt-3 space-y-2">
+                                  {liquidacion.prestamos.map(
+                                    (prestamo) => (
+                                      <div
+                                        key={`${prestamo.liquidacion_id}-${prestamo.prestamo_id}`}
+                                        className="flex min-w-0 flex-col gap-2 rounded-xl bg-white/80 p-3 sm:flex-row sm:items-center sm:justify-between"
+                                      >
+                                        <div className="min-w-0">
+                                          <p className="break-words text-sm font-semibold text-zinc-900">
+                                            {prestamo.descripcion}
+                                          </p>
+                                          <p className="mt-1 text-xs text-zinc-500">
+                                            Préstamo de {formatoCOP.format(
+                                              prestamo.monto_original,
+                                            )}
+                                          </p>
+                                        </div>
+
+                                        <p className="shrink-0 break-words font-black text-amber-900">
+                                          -{formatoCOP.format(
+                                            prestamo.monto_aplicado,
+                                          )}
+                                        </p>
+                                      </div>
+                                    ),
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </article>
