@@ -19,6 +19,7 @@ export interface PagoPendiente {
   pago_mecanico: number
 
   completed_at: string | null
+  observaciones: string | null
 
   trabajos: TrabajoPago[]
 }
@@ -40,6 +41,7 @@ export interface PagoHistorial {
   moto_placa: string
   moto_marca: string
   moto_modelo: string | null
+  observaciones: string | null
 
   monto_pagado: number
 

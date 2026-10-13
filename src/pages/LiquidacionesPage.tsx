@@ -183,6 +183,54 @@ function mostrarFechaPendiente(
   )
 }
 
+function ObservacionesOrden({
+  observaciones,
+}: {
+  observaciones: string | null
+}) {
+  const [abiertas, setAbiertas] =
+    useState(false)
+
+  const texto =
+    observaciones?.trim()
+
+  if (!texto) {
+    return null
+  }
+
+  return (
+    <div className="mt-4 border-t border-zinc-100 pt-3">
+      <button
+        type="button"
+        aria-expanded={abiertas}
+        onClick={() =>
+          setAbiertas(
+            (estadoActual) =>
+              !estadoActual,
+          )
+        }
+        className="inline-flex min-h-9 touch-manipulation items-center justify-center rounded-lg border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:border-zinc-950 hover:text-zinc-950"
+      >
+        {abiertas
+          ? 'Ocultar observaciones'
+          : 'Ver observaciones'}
+      </button>
+
+      {abiertas && (
+        <div className="mt-3 min-w-0 rounded-xl bg-zinc-50 p-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">
+            Observaciones
+          </p>
+
+          <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-700">
+            {texto}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function LiquidacionesPage() {
   const [
     pendientes,
@@ -1556,26 +1604,12 @@ export function LiquidacionesPage() {
                                 )
 
                               return (
-                                <button
+                                <article
                                   key={
                                     moto.orden_id
                                   }
-                                  type="button"
-                                  aria-pressed={
-                                    seleccionada
-                                  }
-                                  disabled={
-                                    pagandoMecanicoId !==
-                                      null ||
-                                    registrandoPrestamo
-                                  }
-                                  onClick={() =>
-                                    alternarOrden(
-                                      moto.orden_id,
-                                    )
-                                  }
                                   className={[
-                                    'min-w-0 touch-manipulation rounded-2xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60 sm:p-5',
+                                    'min-w-0 overflow-hidden rounded-2xl border transition',
                                     seleccionada
                                       ? 'border-zinc-950 bg-zinc-50 ring-2 ring-zinc-950/10'
                                       : 'border-zinc-200 bg-white hover:border-zinc-400',
@@ -1583,6 +1617,23 @@ export function LiquidacionesPage() {
                                     ' ',
                                   )}
                                 >
+                                  <button
+                                    type="button"
+                                    aria-pressed={
+                                      seleccionada
+                                    }
+                                    disabled={
+                                      pagandoMecanicoId !==
+                                        null ||
+                                      registrandoPrestamo
+                                    }
+                                    onClick={() =>
+                                      alternarOrden(
+                                        moto.orden_id,
+                                      )
+                                    }
+                                    className="block w-full min-w-0 touch-manipulation p-4 text-left disabled:cursor-not-allowed disabled:opacity-60 sm:p-5"
+                                  >
                                   <span className="flex min-w-0 items-start gap-3">
                                     <span
                                       aria-hidden="true"
@@ -1673,7 +1724,18 @@ export function LiquidacionesPage() {
                                       </span>
                                     </span>
                                   </span>
-                                </button>
+                                  </button>
+
+                                  {moto.observaciones?.trim() && (
+                                    <div className="px-4 pb-4 sm:px-5 sm:pb-5">
+                                      <ObservacionesOrden
+                                        observaciones={
+                                          moto.observaciones
+                                        }
+                                      />
+                                    </div>
+                                  )}
+                                </article>
                               )
                             },
                           )}
@@ -2203,6 +2265,12 @@ export function LiquidacionesPage() {
                                         </p>
                                       </div>
                                     </div>
+
+                                    <ObservacionesOrden
+                                      observaciones={
+                                        moto.observaciones
+                                      }
+                                    />
                                   </div>
                                 ),
                               )}
