@@ -6,6 +6,7 @@ import {
 
 import {
   CalendarDays,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -15,7 +16,6 @@ import {
   Loader2,
   RefreshCcw,
   UserRound,
-  Wrench,
   X,
 } from 'lucide-react'
 
@@ -35,6 +35,11 @@ interface GrupoPendiente {
 
   total_cobrado: number
   total_mecanico: number
+}
+
+interface GrupoDiaPendiente {
+  fecha: string
+  ordenes: PagoPendiente[]
 }
 
 interface GrupoHistorial {
@@ -75,6 +80,32 @@ const formatoFecha =
     },
   )
 
+const formatoFechaPendiente =
+  new Intl.DateTimeFormat(
+    'es-CO',
+    {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'America/Bogota',
+    },
+  )
+
+const formatoPartesFechaColombia =
+  new Intl.DateTimeFormat(
+    'en-US',
+    {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      timeZone: 'America/Bogota',
+    },
+  )
+
+const FECHA_SIN_REGISTRO =
+  'SIN_FECHA'
+
 function mostrarFecha(
   fecha: string,
 ) {
@@ -82,6 +113,52 @@ function mostrarFecha(
     new Date(
       `${fecha}T12:00:00`,
     ),
+  )
+}
+
+function fechaColombia(
+  fecha: string | null,
+) {
+  if (!fecha) {
+    return FECHA_SIN_REGISTRO
+  }
+
+  const partes =
+    formatoPartesFechaColombia
+      .formatToParts(
+        new Date(fecha),
+      )
+
+  const obtener = (
+    tipo: Intl.DateTimeFormatPartTypes,
+  ) =>
+    partes.find(
+      (parte) =>
+        parte.type === tipo,
+    )?.value ?? ''
+
+  return `${obtener('year')}-${obtener('month')}-${obtener('day')}`
+}
+
+function mostrarFechaPendiente(
+  fecha: string,
+) {
+  if (
+    fecha === FECHA_SIN_REGISTRO
+  ) {
+    return 'Fecha no registrada'
+  }
+
+  const texto =
+    formatoFechaPendiente.format(
+      new Date(
+        `${fecha}T12:00:00-05:00`,
+      ),
+    )
+
+  return (
+    texto.charAt(0).toUpperCase() +
+    texto.slice(1)
   )
 }
 
@@ -103,6 +180,13 @@ export function LiquidacionesPage() {
     setMecanicoSeleccionadoId,
   ] =
     useState('')
+
+  const [
+    ordenesSeleccionadas,
+    setOrdenesSeleccionadas,
+  ] = useState<Set<number>>(
+    () => new Set(),
+  )
 
   const [
     detalleAbierto,
@@ -168,6 +252,12 @@ export function LiquidacionesPage() {
     try {
       setError('')
       setActualizando(true)
+      setOrdenesSeleccionadas(
+        new Set(),
+      )
+      setConfirmandoMecanicoId(
+        null,
+      )
 
       const [
         pagosPendientes,
@@ -429,6 +519,87 @@ export function LiquidacionesPage() {
         mecanicoSeleccionadoId,
     )
 
+  const pendientesPorDia =
+    useMemo(() => {
+      const mapa =
+        new Map<
+          string,
+          GrupoDiaPendiente
+        >()
+
+      for (
+        const orden of
+          pendienteSeleccionado
+            ?.motos ?? []
+      ) {
+        const fecha =
+          fechaColombia(
+            orden.completed_at,
+          )
+
+        const grupo =
+          mapa.get(fecha)
+
+        if (grupo) {
+          grupo.ordenes.push(
+            orden,
+          )
+          continue
+        }
+
+        mapa.set(fecha, {
+          fecha,
+          ordenes: [orden],
+        })
+      }
+
+      return Array.from(
+        mapa.values(),
+      ).sort((a, b) => {
+        if (
+          a.fecha ===
+          FECHA_SIN_REGISTRO
+        ) {
+          return 1
+        }
+
+        if (
+          b.fecha ===
+          FECHA_SIN_REGISTRO
+        ) {
+          return -1
+        }
+
+        return a.fecha.localeCompare(
+          b.fecha,
+        )
+      })
+    }, [pendienteSeleccionado])
+
+  const pagosSeleccionados =
+    pendienteSeleccionado
+      ?.motos.filter((orden) =>
+        ordenesSeleccionadas.has(
+          orden.orden_id,
+        ),
+      ) ?? []
+
+  const totalCobradoSeleccionado =
+    pagosSeleccionados.reduce(
+      (total, orden) =>
+        total +
+        orden.total_cobrado,
+      0,
+    )
+
+  const totalMecanicoSeleccionado =
+    pagosSeleccionados.reduce(
+      (total, orden) =>
+        total +
+        orden.pago_mecanico,
+      0,
+    )
+
   const historialSeleccionado =
     useMemo(() => {
       return gruposHistorial.filter(
@@ -472,9 +643,95 @@ export function LiquidacionesPage() {
       fechaHasta,
     )
 
+  function alternarOrden(
+    ordenId: number,
+  ) {
+    setOrdenesSeleccionadas(
+      (seleccionadas) => {
+        const siguientes =
+          new Set(
+            seleccionadas,
+          )
+
+        if (
+          siguientes.has(
+            ordenId,
+          )
+        ) {
+          siguientes.delete(
+            ordenId,
+          )
+        } else {
+          siguientes.add(
+            ordenId,
+          )
+        }
+
+        return siguientes
+      },
+    )
+
+    setConfirmandoMecanicoId(
+      null,
+    )
+  }
+
+  function alternarDia(
+    ordenes: PagoPendiente[],
+  ) {
+    setOrdenesSeleccionadas(
+      (seleccionadas) => {
+        const siguientes =
+          new Set(
+            seleccionadas,
+          )
+
+        const todasSeleccionadas =
+          ordenes.every((orden) =>
+            siguientes.has(
+              orden.orden_id,
+            ),
+          )
+
+        for (const orden of ordenes) {
+          if (todasSeleccionadas) {
+            siguientes.delete(
+              orden.orden_id,
+            )
+          } else {
+            siguientes.add(
+              orden.orden_id,
+            )
+          }
+        }
+
+        return siguientes
+      },
+    )
+
+    setConfirmandoMecanicoId(
+      null,
+    )
+  }
+
   async function pagar(
     grupo: GrupoPendiente,
   ) {
+    const ordenIds =
+      pagosSeleccionados
+        .map(
+          (orden) =>
+            orden.orden_id,
+        )
+        .sort((a, b) => a - b)
+
+    if (ordenIds.length === 0) {
+      setError(
+        'Selecciona al menos una orden para registrar el pago',
+      )
+      return
+    }
+
     try {
       setError('')
       setMensaje('')
@@ -486,6 +743,7 @@ export function LiquidacionesPage() {
       const resultado =
         await registrarPagoMecanico(
           grupo.mecanico_id,
+          ordenIds,
         )
 
       setConfirmandoMecanicoId(
@@ -496,10 +754,18 @@ export function LiquidacionesPage() {
         null,
       )
 
+      setOrdenesSeleccionadas(
+        new Set(),
+      )
+
       setMensaje(
         `Pago registrado a ${grupo.mecanico_nombre} por ${formatoCOP.format(
           resultado.total_pagado,
-        )}.`,
+        )} correspondiente a ${resultado.cantidad_ordenes} ${
+          resultado.cantidad_ordenes === 1
+            ? 'orden'
+            : 'órdenes'
+        }.`,
       )
 
       await cargarDatos()
@@ -640,6 +906,10 @@ export function LiquidacionesPage() {
                         mecanico.id,
                       )
 
+                      setOrdenesSeleccionadas(
+                        new Set(),
+                      )
+
                       setDetalleAbierto(
                         null,
                       )
@@ -708,7 +978,7 @@ export function LiquidacionesPage() {
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
               <div className="rounded-xl bg-white/10 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  Motos pendientes
+                  Órdenes pendientes totales
                 </p>
 
                 <p className="mt-2 text-2xl font-black">
@@ -720,7 +990,7 @@ export function LiquidacionesPage() {
 
               <div className="rounded-xl bg-white/10 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  Total cobrado
+                  Total cobrado pendiente
                 </p>
 
                 <p className="mt-2 text-xl font-black">
@@ -734,7 +1004,7 @@ export function LiquidacionesPage() {
 
               <div className="rounded-xl bg-white/10 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  Pendiente mecánico
+                  Pendiente total mecánico
                 </p>
 
                 <p className="mt-2 text-xl font-black">
@@ -761,8 +1031,8 @@ export function LiquidacionesPage() {
                 </h2>
 
                 <p className="text-sm text-zinc-500">
-                  Todas las órdenes terminadas
-                  y aún no liquidadas.
+                  Selecciona las órdenes terminadas
+                  que deseas pagar.
                 </p>
               </div>
             </div>
@@ -781,113 +1051,226 @@ export function LiquidacionesPage() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {/* MOTOS */}
-                <div className="grid gap-4 lg:grid-cols-2">
-                  {pendienteSeleccionado.motos.map(
-                    (moto) => (
-                      <article
-                        key={
-                          moto.orden_id
-                        }
-                        className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm"
+              <div className="space-y-5">
+                {/* PENDIENTES POR DÍA */}
+                {pendientesPorDia.map(
+                  (grupoDia) => {
+                    const todasSeleccionadas =
+                      grupoDia.ordenes.every(
+                        (orden) =>
+                          ordenesSeleccionadas.has(
+                            orden.orden_id,
+                          ),
+                      )
+
+                    return (
+                      <section
+                        key={grupoDia.fecha}
+                        className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm"
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <h3 className="font-bold text-zinc-950">
-                              {
-                                moto.moto_marca
-                              }
-                              {' '}
-                              {moto.moto_modelo ||
-                                ''}
+                        <div className="flex flex-col gap-3 border-b border-zinc-200 bg-zinc-50 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                          <div className="min-w-0">
+                            <h3 className="break-words font-bold text-zinc-950">
+                              {mostrarFechaPendiente(
+                                grupoDia.fecha,
+                              )}
                             </h3>
 
-                            <p className="mt-1 text-xl font-black tracking-wider text-zinc-950">
+                            <p className="mt-1 text-sm text-zinc-500">
                               {
-                                moto.moto_placa
-                              }
+                                grupoDia
+                                  .ordenes
+                                  .length
+                              }{' '}
+                              {grupoDia
+                                .ordenes
+                                .length === 1
+                                ? 'orden'
+                                : 'órdenes'}
                             </p>
                           </div>
 
-                          <div className="flex size-10 items-center justify-center rounded-xl bg-zinc-100 text-zinc-600">
-                            <Wrench className="size-5" />
-                          </div>
+                          <button
+                            type="button"
+                            disabled={
+                              pagandoMecanicoId !==
+                              null
+                            }
+                            onClick={() =>
+                              alternarDia(
+                                grupoDia.ordenes,
+                              )
+                            }
+                            className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:border-zinc-950 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                          >
+                            {todasSeleccionadas
+                              ? 'Quitar selección del día'
+                              : 'Seleccionar día'}
+                          </button>
                         </div>
 
-                        <div className="mt-5">
-                          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-zinc-500">
-                            Trabajos realizados
-                          </p>
+                        <div className="grid gap-3 p-4 sm:p-5 lg:grid-cols-2">
+                          {grupoDia.ordenes.map(
+                            (moto) => {
+                              const seleccionada =
+                                ordenesSeleccionadas.has(
+                                  moto.orden_id,
+                                )
 
-                          {moto.trabajos.length >
-                          0 ? (
-                            <div className="flex flex-wrap gap-2">
-                              {moto.trabajos.map(
-                                (
-                                  trabajo,
-                                ) => (
-                                  <span
-                                    key={
-                                      trabajo.id
-                                    }
-                                    className="rounded-lg bg-zinc-100 px-2.5 py-1.5 text-xs font-medium text-zinc-700"
-                                  >
-                                    {
-                                      trabajo.nombre_trabajo
-                                    }
+                              return (
+                                <button
+                                  key={
+                                    moto.orden_id
+                                  }
+                                  type="button"
+                                  aria-pressed={
+                                    seleccionada
+                                  }
+                                  disabled={
+                                    pagandoMecanicoId !==
+                                    null
+                                  }
+                                  onClick={() =>
+                                    alternarOrden(
+                                      moto.orden_id,
+                                    )
+                                  }
+                                  className={[
+                                    'min-w-0 touch-manipulation rounded-2xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60 sm:p-5',
+                                    seleccionada
+                                      ? 'border-zinc-950 bg-zinc-50 ring-2 ring-zinc-950/10'
+                                      : 'border-zinc-200 bg-white hover:border-zinc-400',
+                                  ].join(
+                                    ' ',
+                                  )}
+                                >
+                                  <span className="flex min-w-0 items-start gap-3">
+                                    <span
+                                      aria-hidden="true"
+                                      className={[
+                                        'flex size-7 shrink-0 items-center justify-center rounded-md border-2 transition',
+                                        seleccionada
+                                          ? 'border-zinc-950 bg-zinc-950 text-white'
+                                          : 'border-zinc-300 bg-white text-transparent',
+                                      ].join(
+                                        ' ',
+                                      )}
+                                    >
+                                      <Check className="size-4" />
+                                    </span>
+
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block break-words font-bold text-zinc-950">
+                                        {
+                                          moto.moto_marca
+                                        }{' '}
+                                        {moto.moto_modelo ||
+                                          ''}
+                                      </span>
+
+                                      <span className="mt-1 block text-xl font-black tracking-wider text-zinc-950">
+                                        {
+                                          moto.moto_placa
+                                        }
+                                      </span>
+                                    </span>
                                   </span>
-                                ),
-                              )}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-zinc-500">
-                              Sin trabajos registrados.
-                            </p>
+
+                                  <span className="mt-5 block">
+                                    <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-zinc-500">
+                                      Trabajos realizados
+                                    </span>
+
+                                    {moto.trabajos
+                                      .length > 0 ? (
+                                      <span className="flex flex-wrap gap-2">
+                                        {moto.trabajos.map(
+                                          (
+                                            trabajo,
+                                          ) => (
+                                            <span
+                                              key={
+                                                trabajo.id
+                                              }
+                                              className="rounded-lg bg-zinc-100 px-2.5 py-1.5 text-xs font-medium text-zinc-700"
+                                            >
+                                              {
+                                                trabajo.nombre_trabajo
+                                              }
+                                            </span>
+                                          ),
+                                        )}
+                                      </span>
+                                    ) : (
+                                      <span className="text-sm text-zinc-500">
+                                        Sin trabajos
+                                        registrados.
+                                      </span>
+                                    )}
+                                  </span>
+
+                                  <span className="mt-5 grid gap-3 border-t border-zinc-100 pt-4 sm:grid-cols-2">
+                                    <span>
+                                      <span className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                                        Total cliente
+                                      </span>
+
+                                      <span className="mt-1 block font-bold text-zinc-950">
+                                        {formatoCOP.format(
+                                          moto.total_cobrado,
+                                        )}
+                                      </span>
+                                    </span>
+
+                                    <span>
+                                      <span className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                                        Pago mecánico
+                                      </span>
+
+                                      <span className="mt-1 block font-bold text-emerald-700">
+                                        {formatoCOP.format(
+                                          moto.pago_mecanico,
+                                        )}
+                                      </span>
+                                    </span>
+                                  </span>
+                                </button>
+                              )
+                            },
                           )}
                         </div>
+                      </section>
+                    )
+                  },
+                )}
 
-                        <div className="mt-5 grid gap-3 border-t border-zinc-100 pt-4 sm:grid-cols-2">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                              Total cliente
-                            </p>
-
-                            <p className="mt-1 font-bold text-zinc-950">
-                              {formatoCOP.format(
-                                moto.total_cobrado,
-                              )}
-                            </p>
-                          </div>
-
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                              Pago mecánico
-                            </p>
-
-                            <p className="mt-1 font-bold text-emerald-700">
-                              {formatoCOP.format(
-                                moto.pago_mecanico,
-                              )}
-                            </p>
-                          </div>
-                        </div>
-                      </article>
-                    ),
-                  )}
-                </div>
-
-                {/* TOTAL */}
+                {/* RESUMEN SELECCIONADO */}
                 <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6">
+                  <div className="mb-4">
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-zinc-500">
+                      Seleccionado para pagar
+                    </p>
+
+                    <p className="mt-1 text-lg font-bold text-zinc-950">
+                      {
+                        pagosSeleccionados.length
+                      }{' '}
+                      {pagosSeleccionados.length ===
+                      1
+                        ? 'orden seleccionada'
+                        : 'órdenes seleccionadas'}
+                    </p>
+                  </div>
+
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="rounded-xl bg-zinc-50 p-4">
                       <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">
-                        Total cobrado al cliente
+                        Total cobrado seleccionado
                       </p>
 
                       <p className="mt-2 text-2xl font-black text-zinc-950">
                         {formatoCOP.format(
-                          pendienteSeleccionado.total_cobrado,
+                          totalCobradoSeleccionado,
                         )}
                       </p>
                     </div>
@@ -899,7 +1282,7 @@ export function LiquidacionesPage() {
 
                       <p className="mt-2 text-2xl font-black text-emerald-800">
                         {formatoCOP.format(
-                          pendienteSeleccionado.total_mecanico,
+                          totalMecanicoSeleccionado,
                         )}
                       </p>
                     </div>
@@ -910,15 +1293,21 @@ export function LiquidacionesPage() {
                     pendienteSeleccionado.mecanico_id ? (
                       <button
                         type="button"
+                        disabled={
+                          pagosSeleccionados.length ===
+                            0 ||
+                          pagandoMecanicoId !==
+                            null
+                        }
                         onClick={() =>
                           setConfirmandoMecanicoId(
                             pendienteSeleccionado.mecanico_id,
                           )
                         }
-                        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-zinc-950 px-5 text-sm font-bold text-white transition hover:bg-zinc-800"
+                        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-zinc-950 px-5 text-sm font-bold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                       >
                         <CreditCard className="size-4" />
-                        Registrar pago
+                        Registrar pago seleccionado
                       </button>
                     ) : (
                       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -928,8 +1317,17 @@ export function LiquidacionesPage() {
 
                         <p className="mt-1 text-sm leading-6 text-amber-800">
                           Se registrarán como pagadas
-                          todas las órdenes terminadas
-                          actualmente pendientes de{' '}
+                          únicamente{' '}
+                          <strong>
+                            {
+                              pagosSeleccionados.length
+                            }{' '}
+                            {pagosSeleccionados.length ===
+                            1
+                              ? 'orden seleccionada'
+                              : 'órdenes seleccionadas'}
+                          </strong>{' '}
+                          de{' '}
                           <strong>
                             {
                               pendienteSeleccionado.mecanico_nombre
@@ -945,7 +1343,7 @@ export function LiquidacionesPage() {
 
                           <p className="mt-1 text-xl font-black text-amber-950">
                             {formatoCOP.format(
-                              pendienteSeleccionado.total_mecanico,
+                              totalMecanicoSeleccionado,
                             )}
                           </p>
                         </div>
@@ -962,7 +1360,7 @@ export function LiquidacionesPage() {
                                 pendienteSeleccionado,
                               )
                             }
-                            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-zinc-950 px-4 text-sm font-bold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-zinc-950 px-4 text-sm font-bold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
                           >
                             {pagandoMecanicoId ===
                             pendienteSeleccionado.mecanico_id ? (
@@ -989,7 +1387,7 @@ export function LiquidacionesPage() {
                                 null,
                               )
                             }
-                            className="h-10 rounded-lg border border-amber-300 bg-white px-4 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
+                            className="min-h-10 flex-1 rounded-lg border border-amber-300 bg-white px-4 text-sm font-semibold text-amber-900 transition hover:bg-amber-100 sm:flex-none"
                           >
                             Cancelar
                           </button>

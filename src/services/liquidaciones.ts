@@ -110,13 +110,17 @@ Promise<PagoHistorial[]> {
 
 export async function registrarPagoMecanico(
   mecanicoId: string,
+  ordenIds: number[],
 ): Promise<ResultadoLiquidacion> {
   const { data, error } =
     await supabase.rpc(
-      'liquidar_mecanico',
+      'liquidar_ordenes_mecanico',
       {
         p_mecanico_id:
           mecanicoId,
+
+        p_orden_ids:
+          ordenIds,
       },
     )
 

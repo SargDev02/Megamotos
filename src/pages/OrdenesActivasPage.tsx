@@ -14,6 +14,7 @@ import {
   Loader2,
   MessageCircle,
   Pencil,
+  Phone,
   RefreshCcw,
   Search,
   UserRound,
@@ -291,6 +292,7 @@ export function OrdenesActivasPage() {
             orden.moto.marca.nombre,
             orden.moto.modelo ?? '',
             orden.moto.cliente.nombre,
+            orden.moto.cliente.telefono,
             orden.mecanico.nombre,
             orden.vendedor?.nombre ?? '',
 
@@ -509,6 +511,20 @@ export function OrdenesActivasPage() {
                       .cliente.nombre
                   }
                 </p>
+
+                <a
+                  href={`tel:${orden.moto.cliente.telefono}`}
+                  className="mt-2 inline-flex max-w-full items-center gap-2 text-sm font-medium text-zinc-600 transition hover:text-zinc-950"
+                >
+                  <Phone className="size-4 shrink-0" />
+
+                  <span className="min-w-0 break-all">
+                    {
+                      orden.moto
+                        .cliente.telefono
+                    }
+                  </span>
+                </a>
               </div>
 
               <div className="rounded-xl bg-zinc-50 p-4">
