@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
   type FormEvent,
 } from 'react'
@@ -22,6 +23,8 @@ import {
 import {
   Link,
 } from 'react-router-dom'
+
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 
 import {
   buscarClientesConMotos,
@@ -111,6 +114,15 @@ export function RecepcionPage() {
       null,
     )
 
+  const resultadoIdActual =
+    useRef<number | null>(null)
+
+  const busquedaClienteActual =
+    useRef({
+      modo: 'PLACA' as ModoBusqueda,
+      termino: '',
+    })
+
   const [
     historial,
     setHistorial,
@@ -193,6 +205,109 @@ export function RecepcionPage() {
 
     setHistorial(data)
   }
+
+  useEffect(() => {
+    resultadoIdActual.current =
+      resultado?.id ?? null
+  }, [resultado])
+
+  useEffect(() => {
+    busquedaClienteActual.current = {
+      modo: modoBusqueda,
+      termino: terminoCliente
+        .trim()
+        .replace(/\s+/g, ' '),
+    }
+  }, [modoBusqueda, terminoCliente])
+
+  async function refrescarRecepcionRealtime() {
+    const resultadoVisible =
+      resultado
+
+    const terminoVisible =
+      terminoCliente
+        .trim()
+        .replace(/\s+/g, ' ')
+
+    const refrescoResultado =
+      resultadoVisible
+        ? Promise.all([
+            buscarMotoPorPlaca(
+              resultadoVisible.placa,
+            ),
+            listarHistorialMoto(
+              resultadoVisible.id,
+            ),
+          ])
+        : Promise.resolve(null)
+
+    const refrescoClientes =
+      modoBusqueda === 'CLIENTE' &&
+      busquedaClienteRealizada &&
+      terminoVisible.length >= 2
+        ? buscarClientesConMotos(
+            terminoVisible,
+          )
+        : Promise.resolve(null)
+
+    const [
+      marcasActualizadas,
+      datosActualizados,
+      clientesActualizados,
+    ] = await Promise.all([
+      listarMarcas(),
+      refrescoResultado,
+      refrescoClientes,
+    ])
+
+    setMarcas(marcasActualizadas)
+
+    if (
+      clientesActualizados &&
+      busquedaClienteActual.current
+        .modo === 'CLIENTE' &&
+      busquedaClienteActual.current
+        .termino === terminoVisible
+    ) {
+      setClientesEncontrados(
+        clientesActualizados,
+      )
+    }
+
+    if (
+      !resultadoVisible ||
+      !datosActualizados ||
+      resultadoIdActual.current !==
+        resultadoVisible.id
+    ) {
+      return
+    }
+
+    const [
+      motoActualizada,
+      historialActualizado,
+    ] = datosActualizados
+
+    setResultado(motoActualizada)
+    setHistorial(
+      motoActualizada
+        ? historialActualizado
+        : [],
+    )
+  }
+
+  useRealtimeRefresh({
+    channelName: 'recepcion',
+    tables: [
+      'clientes',
+      'motos',
+      'marcas_moto',
+      'ordenes',
+      'trabajos_orden',
+    ],
+    onChange:
+      refrescarRecepcionRealtime,
+  })
 
   useEffect(() => {
     let ignorarResultado = false

@@ -25,6 +25,7 @@ import {
 } from 'react-router-dom'
 
 import { BuscadorTrabajos } from '../components/BuscadorTrabajos'
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 
 import {
   actualizarOrden,
@@ -119,6 +120,23 @@ export function EditarOrdenPage() {
     setError,
   ] =
     useState('')
+
+  async function refrescarCatalogoRealtime() {
+    const trabajosDisponibles =
+      await obtenerTrabajosDisponibles()
+
+    setCatalogo(
+      trabajosDisponibles,
+    )
+  }
+
+  useRealtimeRefresh({
+    channelName:
+      'catalogo-editar-orden',
+    tables: ['tipos_trabajo'],
+    onChange:
+      refrescarCatalogoRealtime,
+  })
 
   useEffect(() => {
     async function cargar() {

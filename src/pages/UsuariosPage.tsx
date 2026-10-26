@@ -23,6 +23,8 @@ import {
   XCircle,
 } from 'lucide-react'
 
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
+
 import {
   cambiarEstadoUsuario,
   cambiarNombreUsuario,
@@ -186,6 +188,21 @@ export function UsuariosPage() {
       setActualizando(false)
     }
   }
+
+  async function refrescarUsuariosRealtime() {
+    const data =
+      await listarUsuarios()
+
+    setUsuarios(data)
+  }
+
+  useRealtimeRefresh({
+    channelName:
+      'administracion-usuarios',
+    tables: ['perfiles'],
+    onChange:
+      refrescarUsuariosRealtime,
+  })
 
   useEffect(() => {
     let ignorarResultado = false

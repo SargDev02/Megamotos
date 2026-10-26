@@ -26,6 +26,8 @@ import {
   Link,
 } from 'react-router-dom'
 
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
+
 import {
   cambiarEstadoOrden,
   listarOrdenesActivas,
@@ -211,6 +213,27 @@ export function OrdenesActivasPage() {
       setCargando(false)
     }
   }
+
+  async function refrescarOrdenesRealtime() {
+    const data =
+      await listarOrdenesActivas()
+
+    setOrdenes(data)
+  }
+
+  useRealtimeRefresh({
+    channelName:
+      'ordenes-activas',
+    tables: [
+      'ordenes',
+      'trabajos_orden',
+      'motos',
+      'clientes',
+      'perfiles',
+    ],
+    onChange:
+      refrescarOrdenesRealtime,
+  })
 
   useEffect(() => {
     let ignorarResultado = false

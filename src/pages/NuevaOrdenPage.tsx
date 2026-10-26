@@ -24,6 +24,7 @@ import {
 } from 'react-router-dom'
 
 import { BuscadorTrabajos } from '../components/BuscadorTrabajos'
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 
 import {
   buscarMotoPorPlaca,
@@ -128,6 +129,23 @@ export function NuevaOrdenPage() {
       pago_mecanico: number
       porcentaje_mecanico: number
     } | null>(null)
+
+  async function refrescarCatalogoRealtime() {
+    const trabajosDisponibles =
+      await obtenerTrabajosDisponibles()
+
+    setCatalogo(
+      trabajosDisponibles,
+    )
+  }
+
+  useRealtimeRefresh({
+    channelName:
+      'catalogo-nueva-orden',
+    tables: ['tipos_trabajo'],
+    onChange:
+      refrescarCatalogoRealtime,
+  })
 
   useEffect(() => {
     async function cargar() {

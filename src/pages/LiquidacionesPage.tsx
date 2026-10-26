@@ -28,6 +28,7 @@ import {
   type PagoHistorial,
   type PagoPendiente,
 } from '../services/liquidaciones'
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import {
   listarAplicacionesPrestamos,
   listarMecanicosParaPrestamos,
@@ -409,6 +410,75 @@ export function LiquidacionesPage() {
       setActualizando(false)
     }
   }
+
+  async function refrescarDatosRealtime() {
+    const [
+      pagosPendientes,
+      historialPagos,
+      prestamosMecanicos,
+      aplicaciones,
+      mecanicos,
+    ] = await Promise.all([
+      listarPagosPendientes(),
+      listarHistorialPagos(),
+      listarPrestamosMecanicos(),
+      listarAplicacionesPrestamos(),
+      listarMecanicosParaPrestamos(),
+    ])
+
+    const ordenesValidas =
+      new Set(
+        pagosPendientes
+          .filter(
+            (pago) =>
+              pago.mecanico_id ===
+              mecanicoSeleccionadoId,
+          )
+          .map(
+            (pago) =>
+              pago.orden_id,
+          ),
+      )
+
+    setPendientes(pagosPendientes)
+    setHistorial(historialPagos)
+    setPrestamos(prestamosMecanicos)
+    setAplicacionesPrestamos(aplicaciones)
+    setMecanicosRegistrados(mecanicos)
+    setConfirmandoMecanicoId(null)
+    setOrdenesSeleccionadas(
+      (seleccionadas) => {
+        const siguientes =
+          new Set(
+            Array.from(
+              seleccionadas,
+            ).filter((ordenId) =>
+              ordenesValidas.has(
+                ordenId,
+              ),
+            ),
+          )
+
+        return siguientes.size ===
+          seleccionadas.size
+          ? seleccionadas
+          : siguientes
+      },
+    )
+  }
+
+  useRealtimeRefresh({
+    channelName: 'liquidaciones',
+    tables: [
+      'ordenes',
+      'liquidaciones',
+      'liquidacion_ordenes',
+      'prestamos_mecanicos',
+      'liquidacion_prestamos',
+    ],
+    onChange:
+      refrescarDatosRealtime,
+  })
 
   useEffect(() => {
     let ignorarResultado = false

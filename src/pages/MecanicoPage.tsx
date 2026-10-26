@@ -14,6 +14,8 @@ import {
   Wrench,
 } from 'lucide-react'
 
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
+
 import {
   listarMisOrdenes,
   type OrdenMecanico,
@@ -76,6 +78,26 @@ export function MecanicoPage() {
       setActualizando(false)
     }
   }
+
+  async function refrescarOrdenesRealtime() {
+    const data =
+      await listarMisOrdenes()
+
+    setOrdenes(data)
+  }
+
+  useRealtimeRefresh({
+    channelName:
+      'ordenes-mecanico',
+    tables: [
+      'ordenes',
+      'trabajos_orden',
+      'motos',
+      'perfiles',
+    ],
+    onChange:
+      refrescarOrdenesRealtime,
+  })
 
   useEffect(() => {
     let ignorarResultado = false

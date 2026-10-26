@@ -18,6 +18,8 @@ import {
   XCircle,
 } from 'lucide-react'
 
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
+
 import {
   actualizarTrabajo,
   cambiarEstadoTrabajo,
@@ -164,6 +166,21 @@ export function TrabajosPage() {
       setActualizando(false)
     }
   }
+
+  async function refrescarTrabajosRealtime() {
+    const data =
+      await listarTrabajos()
+
+    setTrabajos(data)
+  }
+
+  useRealtimeRefresh({
+    channelName:
+      'catalogo-trabajos',
+    tables: ['tipos_trabajo'],
+    onChange:
+      refrescarTrabajosRealtime,
+  })
 
   useEffect(() => {
     let ignorarResultado = false
