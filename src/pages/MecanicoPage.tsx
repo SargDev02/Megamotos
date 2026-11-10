@@ -97,6 +97,10 @@ export function MecanicoPage() {
     ],
     onChange:
       refrescarOrdenesRealtime,
+    broadcast: {
+      topic: 'megamotos:ordenes',
+      event: 'ordenes_changed',
+    },
   })
 
   useEffect(() => {

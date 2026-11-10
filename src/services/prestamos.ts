@@ -58,6 +58,7 @@ Promise<MecanicoPrestamo[]> {
     .from('perfiles')
     .select('id, nombre')
     .eq('rol', 'MECANICO')
+    .eq('activo', true)
     .order('nombre')
 
   if (error) {

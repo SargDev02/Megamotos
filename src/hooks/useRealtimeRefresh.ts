@@ -10,6 +10,10 @@ interface UseRealtimeRefreshOptions {
   tables: readonly string[]
   onChange: () => void | Promise<void>
   debounceMs?: number
+  broadcast?: {
+    topic: string
+    event: string
+  }
 }
 
 export function useRealtimeRefresh({
@@ -17,12 +21,15 @@ export function useRealtimeRefresh({
   tables,
   onChange,
   debounceMs = 300,
+  broadcast,
 }: UseRealtimeRefreshOptions) {
   const onChangeRef =
     useRef(onChange)
 
   const tablesKey =
     tables.join(',')
+  const broadcastTopic = broadcast?.topic
+  const broadcastEvent = broadcast?.event
 
   useEffect(() => {
     onChangeRef.current = onChange
@@ -36,7 +43,7 @@ export function useRealtimeRefresh({
       | undefined
 
     let activo = true
-    let errorNotificado = false
+    const erroresNotificados = new Set<string>()
 
     const programarRefresco = () => {
       if (!activo) {
@@ -81,28 +88,47 @@ export function useRealtimeRefresh({
       )
     }
 
-    channel.subscribe(
-      (status) => {
-        if (
-          status === 'SUBSCRIBED'
-        ) {
-          errorNotificado = false
-          return
-        }
+    const manejarEstado = (
+      status: string,
+      nombreCanal: string,
+    ) => {
+      if (status === 'SUBSCRIBED') {
+        erroresNotificados.delete(nombreCanal)
+        return
+      }
 
-        if (
-          !errorNotificado &&
-          (status ===
-            'CHANNEL_ERROR' ||
-            status === 'TIMED_OUT')
-        ) {
-          errorNotificado = true
+      if (
+        !erroresNotificados.has(nombreCanal) &&
+        (status === 'CHANNEL_ERROR' ||
+          status === 'TIMED_OUT')
+      ) {
+        erroresNotificados.add(nombreCanal)
 
-          console.warn(
-            `Realtime no disponible para ${channelName}. La actualización manual continúa activa.`,
-          )
-        }
-      },
+        console.warn(
+          `Realtime no disponible para ${nombreCanal}. La actualización manual continúa activa.`,
+        )
+      }
+    }
+
+    channel.subscribe((status) =>
+      manejarEstado(status, channelName),
+    )
+
+    const broadcastChannel =
+      broadcastTopic && broadcastEvent
+        ? supabase
+            .channel(broadcastTopic, {
+              config: { private: true },
+            })
+            .on(
+              'broadcast',
+              { event: broadcastEvent },
+              programarRefresco,
+            )
+        : null
+
+    broadcastChannel?.subscribe((status) =>
+      manejarEstado(status, broadcastTopic ?? channelName),
     )
 
     return () => {
@@ -115,10 +141,17 @@ export function useRealtimeRefresh({
       void supabase.removeChannel(
         channel,
       )
+      if (broadcastChannel) {
+        void supabase.removeChannel(
+          broadcastChannel,
+        )
+      }
     }
   }, [
     channelName,
     debounceMs,
     tablesKey,
+    broadcastTopic,
+    broadcastEvent,
   ])
 }

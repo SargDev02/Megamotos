@@ -125,9 +125,9 @@ export function UsuariosPage() {
   ] = useState('')
 
   const [
-    filtroEstado,
-    setFiltroEstado,
-  ] = useState('')
+    pestanaUsuarios,
+    setPestanaUsuarios,
+  ] = useState<'ACTIVOS' | 'ARCHIVADOS'>('ACTIVOS')
 
   const [
     editandoPassword,
@@ -266,17 +266,8 @@ export function UsuariosPage() {
           }
 
           if (
-            filtroEstado ===
-              'ACTIVO' &&
-            !usuario.activo
-          ) {
-            return false
-          }
-
-          if (
-            filtroEstado ===
-              'INACTIVO' &&
-            usuario.activo
+            usuario.activo !==
+            (pestanaUsuarios === 'ACTIVOS')
           ) {
             return false
           }
@@ -303,15 +294,11 @@ export function UsuariosPage() {
       usuarios,
       filtroTexto,
       filtroRol,
-      filtroEstado,
+      pestanaUsuarios,
     ])
 
   const filtrosActivos =
-    Boolean(
-      filtroTexto ||
-      filtroRol ||
-      filtroEstado,
-    )
+    Boolean(filtroTexto || filtroRol)
 
   const resumen =
     useMemo(() => {
@@ -1027,6 +1014,34 @@ export function UsuariosPage() {
 
       {/* FILTROS */}
       <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="mb-4 inline-flex rounded-lg bg-zinc-100 p-1" role="group" aria-label="Estado de usuarios">
+          <button
+            type="button"
+            aria-pressed={pestanaUsuarios === 'ACTIVOS'}
+            onClick={() => setPestanaUsuarios('ACTIVOS')}
+            className={[
+              'rounded-md px-4 py-2 text-sm font-semibold transition',
+              pestanaUsuarios === 'ACTIVOS'
+                ? 'bg-white text-zinc-950 shadow-sm'
+                : 'text-zinc-600 hover:text-zinc-950',
+            ].join(' ')}
+          >
+            Activos
+          </button>
+          <button
+            type="button"
+            aria-pressed={pestanaUsuarios === 'ARCHIVADOS'}
+            onClick={() => setPestanaUsuarios('ARCHIVADOS')}
+            className={[
+              'rounded-md px-4 py-2 text-sm font-semibold transition',
+              pestanaUsuarios === 'ARCHIVADOS'
+                ? 'bg-white text-zinc-950 shadow-sm'
+                : 'text-zinc-600 hover:text-zinc-950',
+            ].join(' ')}
+          >
+            Archivados
+          </button>
+        </div>
         <div className="flex flex-col gap-3 xl:flex-row">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
@@ -1070,37 +1085,12 @@ export function UsuariosPage() {
             </option>
           </select>
 
-          <select
-            value={
-              filtroEstado
-            }
-            onChange={(event) =>
-              setFiltroEstado(
-                event.target.value,
-              )
-            }
-            className="h-11 rounded-lg border border-zinc-300 bg-white px-3 text-sm outline-none transition focus:border-zinc-950 xl:min-w-44"
-          >
-            <option value="">
-              Todos los estados
-            </option>
-
-            <option value="ACTIVO">
-              Activos
-            </option>
-
-            <option value="INACTIVO">
-              Inactivos
-            </option>
-          </select>
-
           {filtrosActivos && (
             <button
               type="button"
               onClick={() => {
                 setFiltroTexto('')
                 setFiltroRol('')
-                setFiltroEstado('')
               }}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-600 transition hover:bg-zinc-50"
             >
@@ -1111,10 +1101,11 @@ export function UsuariosPage() {
         </div>
 
         <p className="mt-3 text-xs text-zinc-500">
-          {usuariosFiltrados.length ===
-          usuarios.length
-            ? `${usuarios.length} usuarios`
-            : `Mostrando ${usuariosFiltrados.length} de ${usuarios.length} usuarios`}
+          Mostrando {usuariosFiltrados.length} de{' '}
+          {usuarios.filter((usuario) =>
+            usuario.activo === (pestanaUsuarios === 'ACTIVOS'),
+          ).length}{' '}
+          usuarios {pestanaUsuarios === 'ACTIVOS' ? 'activos' : 'archivados'}
         </p>
       </section>
 
@@ -1126,9 +1117,9 @@ export function UsuariosPage() {
           </h2>
 
           <p className="mt-1 text-sm text-zinc-500">
-            Usuarios con acceso al sistema,
-            incluidos los que fueron
-            desactivados.
+            {pestanaUsuarios === 'ACTIVOS'
+              ? 'Usuarios con acceso activo al sistema.'
+              : 'Usuarios inactivos que pueden volver a activarse.'}
           </p>
         </div>
 

@@ -471,6 +471,7 @@ export function LiquidacionesPage() {
     channelName: 'liquidaciones',
     tables: [
       'ordenes',
+      'perfiles',
       'liquidaciones',
       'liquidacion_ordenes',
       'prestamos_mecanicos',
@@ -662,6 +663,12 @@ export function LiquidacionesPage() {
 
   const mecanicos =
     useMemo(() => {
+      const mecanicosActivos =
+        new Set(
+          mecanicosRegistrados.map(
+            (mecanico) => mecanico.id,
+          ),
+        )
       const mapa =
         new Map<
           string,
@@ -681,6 +688,9 @@ export function LiquidacionesPage() {
       for (
         const grupo of gruposPendientes
       ) {
+        if (!mecanicosActivos.has(grupo.mecanico_id)) {
+          continue
+        }
         mapa.set(
           grupo.mecanico_id,
           {
@@ -697,6 +707,7 @@ export function LiquidacionesPage() {
         const grupo of gruposHistorial
       ) {
         if (
+          mecanicosActivos.has(grupo.mecanico_id) &&
           !mapa.has(
             grupo.mecanico_id,
           )
@@ -716,6 +727,7 @@ export function LiquidacionesPage() {
 
       for (const prestamo of prestamos) {
         if (
+          mecanicosActivos.has(prestamo.mecanico_id) &&
           !mapa.has(
             prestamo.mecanico_id,
           )
